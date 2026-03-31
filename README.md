@@ -1,16 +1,66 @@
-# React + Vite
+# Frontend Thu Vien
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend React + Vite for the library management project.
 
-Currently, two official plugins are available:
+## Related Backend
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Use backend repo:
+https://github.com/Dungnong/BE-thuvien
 
-## React Compiler
+Frontend is configured to call API at:
+http://127.0.0.1:8000
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Requirements
 
-## Expanding the ESLint configuration
+1. Node.js 20+
+2. npm 10+
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Quick Start
+
+1. Clone repo
+	git clone https://github.com/Dungnong/frontend-thuvien.git
+
+2. Go to project folder
+	cd frontend-thuvien
+
+3. Install dependencies
+	npm install
+
+4. Run development server
+	npm run dev
+
+5. Open browser
+	http://localhost:5173
+
+## Build And Lint
+
+1. Run lint
+	npm run lint
+
+2. Build production bundle
+	npm run build
+
+3. Preview production build
+	npm run preview
+
+## Team Testing Flow (BE + FE)
+
+1. Start backend first at 127.0.0.1:8000
+2. Start frontend at localhost:5173
+3. Test login, borrow book, seat booking, profile update
+
+## Common Issues
+
+1. API request failed
+	Backend is not running or not on port 8000.
+
+2. CORS error
+	Check backend CORS in LMM settings.
+
+3. npm command blocked in PowerShell
+	Use npm.cmd instead of npm.
+
+## Notes
+
+1. This repo contains frontend source only.
+2. Keep backend and frontend running in separate terminals.
