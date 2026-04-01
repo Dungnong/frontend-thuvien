@@ -7,20 +7,15 @@ import Login from './Login';
 import Register from './Register';
 import SeatBooking from './SeatBooking';
 import AdminDashboard from './AdminDashboard';
+import { clearAuthStorage, getAuthRole, isAdminRole } from './auth';
 
-function parseJwtPayload(token) {
-  try {
-    const payload = token?.split('.')?.[1];
-    if (!payload) return null;
-    return JSON.parse(atob(payload));
-  } catch {
-    return null;
-  }
-}
-
-function ProtectedRoute({ isLoggedIn, children }) {
+function RoleRoute({ isLoggedIn, role, allowedRoles, fallbackPath, children }) {
   if (!isLoggedIn) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(role)) {
+    return <Navigate to={fallbackPath || (role === 'librarian' ? '/admin' : '/dashboard')} replace />;
   }
 
   return children;
@@ -30,25 +25,39 @@ function ProtectedRoute({ isLoggedIn, children }) {
 // ==========================================
 function Home() {
   const [books, setBooks] = useState([])
+  const [categories, setCategories] = useState([])
   const [error, setError] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('')
 
   useEffect(() => {
-    axios.get('http://127.0.0.1:8000/api/books/books/') 
-      .then(response => {
-        if (Array.isArray(response.data)) setBooks(response.data)
+    Promise.all([
+      axios.get('http://127.0.0.1:8000/api/books/books/'),
+      axios.get('http://127.0.0.1:8000/api/books/categories/')
+    ])
+      .then(([bookResponse, categoryResponse]) => {
+        if (Array.isArray(bookResponse.data)) setBooks(bookResponse.data)
         else setError("Backend trả về dữ liệu không đúng định dạng.")
+
+        if (Array.isArray(categoryResponse.data)) setCategories(categoryResponse.data)
       })
       .catch(() => setError("Không thể kết nối đến Backend."))
   }, [])
+
+  const getCategoryName = (book) => {
+    if (book?.category_name) return book.category_name;
+    return categories.find((x) => Number(x.id) === Number(book?.category))?.name || 'Chưa phân loại';
+  };
 
   const filteredBooks = books.filter(book => {
     // Chuyển về chữ thường, nếu không có dữ liệu thì mặc định là chuỗi trống ''
     const title = (book?.title || '').toLowerCase();
     const author = (book?.author || '').toLowerCase();
     const search = searchTerm.toLowerCase();
-    
-    return title.includes(search) || author.includes(search);
+    const matchesSearch = title.includes(search) || author.includes(search);
+    const matchesCategory = !selectedCategory || Number(book?.category) === Number(selectedCategory);
+
+    return matchesSearch && matchesCategory;
   });
 
   return (
@@ -61,6 +70,19 @@ function Home() {
           onChange={(e) => setSearchTerm(e.target.value)}
         />
       </div>
+
+      <div className="search-box" style={{ marginTop: '-20px', marginBottom: '28px' }}>
+        <select
+          value={selectedCategory}
+          onChange={(e) => setSelectedCategory(e.target.value)}
+          style={{ width: '100%', maxWidth: '360px', padding: '12px 16px', borderRadius: '12px', border: '2px solid #ddd', fontSize: '15px' }}
+        >
+          <option value="">📚 Tất cả thể loại</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>{category.name}</option>
+          ))}
+        </select>
+      </div>
       
       {error && <p style={{ color: 'red', fontWeight: 'bold' }}>{error}</p>}
       
@@ -70,8 +92,18 @@ function Home() {
           filteredBooks.map(book => (
             <Link to={`/book/${book.id}`} key={book.id} className="book-card-link">
               <div className="book-card">
+                {book?.cover_image && (
+                  <div style={{ marginBottom: '12px', textAlign: 'center', background: '#f5f5f5', border: '1px solid #eee', borderRadius: '8px', padding: '8px' }}>
+                    <img
+                      src={book.cover_image.startsWith('http') ? book.cover_image : `http://127.0.0.1:8000${book.cover_image}`}
+                      alt={book?.title || 'Bia sach'}
+                      style={{ width: '100%', height: '180px', objectFit: 'contain', borderRadius: '6px' }}
+                    />
+                  </div>
+                )}
                 {/* Thêm dấu ? sau book để an toàn tuyệt đối */}
                 <h3>{book?.title || "Không có tên"}</h3>
+                <p><strong>Thể loại:</strong> {getCategoryName(book)}</p>
                 <p><strong>Tác giả:</strong> {book?.author || "Chưa rõ"}</p>
                 <p><strong>Năm XB:</strong> {book?.pub_year || "N/A"}</p>
                 <span className={book?.is_available ? "status green" : "status red"}>
@@ -81,7 +113,7 @@ function Home() {
             </Link>
           ))
         ) : (
-          !error && <p className="temp-page">🔍 Không tìm thấy cuốn sách nào khớp với từ khóa "{searchTerm}"</p>
+          !error && <p className="temp-page">🔍 Không tìm thấy cuốn sách nào phù hợp với bộ lọc hiện tại</p>
         )}
       </div>
     </div>
@@ -273,18 +305,13 @@ function BookDetail() {
 function App() {
   // Đăng nhập dựa trên token để tránh sai lệch state sau khi refresh trang.
   const accessToken = localStorage.getItem('access_token');
-  const tokenPayload = parseJwtPayload(accessToken);
-  const role = localStorage.getItem('role') || tokenPayload?.role || '';
+  const role = getAuthRole();
   const isLoggedIn = Boolean(accessToken);
-  const isAdmin = role === 'librarian' || tokenPayload?.is_staff === true;
+  const isAdmin = isAdminRole(role);
 
   // 2. Hàm xử lý khi bấm nút Đăng xuất
   const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('isLoggedIn'); // Xóa thẻ đăng nhập
-    localStorage.removeItem('username');   // Xóa tên
-    localStorage.removeItem('role');
+    clearAuthStorage();
     window.location.href = '/';            // Đá về trang chủ và tải lại trang
   };
 
@@ -310,39 +337,11 @@ function App() {
           </li>
           
           {isLoggedIn ? (
-            <>
-              <li>
-                <NavLink 
-                  to="/dashboard" 
-                  style={({ isActive }) => ({
-                    color: 'white',
-                    textDecoration: 'none',
-                    paddingBottom: '5px',
-                    borderBottom: isActive ? '3px solid white' : 'none', /* Gạch chân chà bá */
-                    fontWeight: isActive ? 'bold' : 'normal'
-                  })}
-                >
-                  Cá nhân
-                </NavLink>
-              </li>
-              <li>
-                <NavLink
-                  to="/seats"
-                  style={({ isActive }) => ({
-                    color: 'white',
-                    textDecoration: 'none',
-                    paddingBottom: '5px',
-                    borderBottom: isActive ? '3px solid white' : 'none',
-                    fontWeight: isActive ? 'bold' : 'normal'
-                  })}
-                >
-                  Chỗ ngồi
-                </NavLink>
-              </li>
-              {isAdmin && (
+            isAdmin ? (
+              <>
                 <li>
-                  <NavLink
-                    to="/admin"
+                  <NavLink 
+                    to="/admin" 
                     style={({ isActive }) => ({
                       color: 'white',
                       textDecoration: 'none',
@@ -354,13 +353,49 @@ function App() {
                     Quản lý
                   </NavLink>
                 </li>
-              )}
-              <li>
-                <button onClick={handleLogout} style={{ background: 'transparent', border: '1px solid white', color: 'white', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold', marginLeft: '10px' }}>
-                  Đăng xuất
-                </button>
-              </li>
-            </>
+                <li>
+                  <button onClick={handleLogout} style={{ background: 'transparent', border: '1px solid white', color: 'white', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold', marginLeft: '10px' }}>
+                    Đăng xuất
+                  </button>
+                </li>
+              </>
+            ) : (
+              <>
+                <li>
+                  <NavLink 
+                    to="/dashboard" 
+                    style={({ isActive }) => ({
+                      color: 'white',
+                      textDecoration: 'none',
+                      paddingBottom: '5px',
+                      borderBottom: isActive ? '3px solid white' : 'none',
+                      fontWeight: isActive ? 'bold' : 'normal'
+                    })}
+                  >
+                    Cá nhân
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to="/seats"
+                    style={({ isActive }) => ({
+                      color: 'white',
+                      textDecoration: 'none',
+                      paddingBottom: '5px',
+                      borderBottom: isActive ? '3px solid white' : 'none',
+                      fontWeight: isActive ? 'bold' : 'normal'
+                    })}
+                  >
+                    Chỗ ngồi
+                  </NavLink>
+                </li>
+                <li>
+                  <button onClick={handleLogout} style={{ background: 'transparent', border: '1px solid white', color: 'white', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold', marginLeft: '10px' }}>
+                    Đăng xuất
+                  </button>
+                </li>
+              </>
+            )
           ) : (
             <>
               <li>
@@ -385,25 +420,25 @@ function App() {
             <Route
               path="/dashboard"
               element={
-                <ProtectedRoute isLoggedIn={isLoggedIn}>
+                <RoleRoute isLoggedIn={isLoggedIn} role={role} allowedRoles={['reader']} fallbackPath="/admin">
                   <Profile />
-                </ProtectedRoute>
+                </RoleRoute>
               }
             />
             <Route
               path="/seats"
               element={
-                <ProtectedRoute isLoggedIn={isLoggedIn}>
+                <RoleRoute isLoggedIn={isLoggedIn} role={role} allowedRoles={['reader']} fallbackPath="/admin">
                   <SeatBooking />
-                </ProtectedRoute>
+                </RoleRoute>
               }
             />
             <Route
               path="/admin"
               element={
-                <ProtectedRoute isLoggedIn={isLoggedIn}>
-                  {isAdmin ? <AdminDashboard /> : <Navigate to="/dashboard" replace />}
-                </ProtectedRoute>
+                <RoleRoute isLoggedIn={isLoggedIn} role={role} allowedRoles={['librarian']} fallbackPath="/dashboard">
+                  <AdminDashboard />
+                </RoleRoute>
               }
             />
             <Route path="/login" element={<Login />} />

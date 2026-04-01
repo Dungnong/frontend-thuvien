@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import './App.css';
+import { getAuthRole, isAdminRole, normalizeRole, parseJwtPayload } from './auth';
 
 function Login() {
   const [username, setUsername] = useState('');
@@ -26,19 +27,28 @@ function Login() {
       localStorage.setItem('isLoggedIn', 'true');
       localStorage.setItem('username', username);
 
+      const tokenPayload = parseJwtPayload(response.data.access);
+
       try {
         const profileResponse = await axios.get('http://127.0.0.1:8000/api/core/users/profile/', {
           headers: {
             Authorization: `Bearer ${response.data.access}`,
           }
         });
-        localStorage.setItem('role', profileResponse.data?.role || 'reader');
+        const resolvedRole = normalizeRole(
+          profileResponse.data?.role
+          || profileResponse.data?.user?.role
+          || tokenPayload?.role
+          || (tokenPayload?.is_staff ? 'librarian' : 'reader')
+        );
+        localStorage.setItem('role', resolvedRole);
       } catch {
-        localStorage.setItem('role', 'reader');
+        localStorage.setItem('role', normalizeRole(tokenPayload?.role || (tokenPayload?.is_staff ? 'librarian' : 'reader')));
       }
       
-      // 3. Đăng nhập thành công, đá sang trang Cá nhân và load lại web
-      window.location.href = '/dashboard';
+      // 3. Đăng nhập thành công, đá sang màn hình đúng vai trò
+      const currentRole = getAuthRole();
+      window.location.href = isAdminRole(currentRole) ? '/admin' : '/dashboard';
 
     } catch (error) {
       // 4. Nếu Django lắc đầu (sai mật khẩu/tài khoản), hiện chữ báo lỗi đỏ

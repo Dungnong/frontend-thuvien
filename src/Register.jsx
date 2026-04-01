@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import './App.css';
+import { clearAuthStorage } from './auth';
 
 function Register() {
   const [formData, setFormData] = useState({
@@ -49,6 +50,7 @@ function Register() {
         email: formData.email,
       });
 
+      clearAuthStorage();
       setSuccessMessage('✅ Đăng ký thành công! Chuyển sang đăng nhập...');
       setTimeout(() => navigate('/login'), 2000);
     } catch (error) {

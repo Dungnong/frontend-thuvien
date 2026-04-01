@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios'; // Công cụ gọi API
+import { Link } from 'react-router-dom';
 import './App.css'; 
+import { clearAuthStorage, getAuthRole, isAdminRole } from './auth';
 
 function Profile() {
+  const role = getAuthRole();
+  const isAdmin = isAdminRole(role);
+
   // Biến chứa danh sách sách thật kéo từ Backend về
   const [borrowedBooks, setBorrowedBooks] = useState([]);
   const [isReturning, setIsReturning] = useState(null); // Track which loan is being returned
-  const [activeTab, setActiveTab] = useState('loans'); // Tab: loans | profile | password
+  const [activeTab, setActiveTab] = useState(isAdmin ? 'profile' : 'loans'); // Tab: loans | profile | password
   
   // Tự động lấy tên tài khoản từ lúc Đăng nhập
   const username = localStorage.getItem('username') || 'Khách';
@@ -28,10 +33,7 @@ function Profile() {
   const [message, setMessage] = useState({ type: '', text: '' });
 
   const logoutAndRedirect = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('isLoggedIn');
-    localStorage.removeItem('username');
+    clearAuthStorage();
     window.location.href = '/login';
   };
 
@@ -68,7 +70,8 @@ function Profile() {
         }
       });
     } catch (error) {
-      if (error.response?.status !== 401) throw error;
+      const statusCode = error.response?.status;
+      if (statusCode !== 401 && statusCode !== 403) throw error;
 
       const newAccessToken = await refreshAccessToken();
       if (!newAccessToken) {
@@ -118,10 +121,12 @@ function Profile() {
 
   // useEffect sẽ tự động chạy 1 lần ngay khi mở trang Cá nhân
   useEffect(() => {
-    fetchMyBooks();
+    if (!isAdmin) {
+      fetchMyBooks();
+    }
     fetchMyProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isAdmin]);
 
   // ✅ Hàm xử lý trả sách
   const handleReturnBook = async (loanId) => {
@@ -194,20 +199,22 @@ function Profile() {
     <div className="container">
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '2px solid #ddd' }}>
-        <button 
-          onClick={() => setActiveTab('loans')}
-          style={{
-            padding: '12px 20px',
-            background: activeTab === 'loans' ? '#b01e23' : '#f0f0f0',
-            color: activeTab === 'loans' ? 'white' : '#333',
-            border: 'none',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-            borderRadius: '4px 4px 0 0'
-          }}
-        >
-          📚 Sách Đang Mượn
-        </button>
+        {!isAdmin && (
+          <button 
+            onClick={() => setActiveTab('loans')}
+            style={{
+              padding: '12px 20px',
+              background: activeTab === 'loans' ? '#b01e23' : '#f0f0f0',
+              color: activeTab === 'loans' ? 'white' : '#333',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              borderRadius: '4px 4px 0 0'
+            }}
+          >
+            📚 Sách Đang Mượn
+          </button>
+        )}
         <button 
           onClick={() => setActiveTab('profile')}
           style={{
@@ -220,7 +227,7 @@ function Profile() {
             borderRadius: '4px 4px 0 0'
           }}
         >
-          👤 Cập Nhật Hồ Sơ
+          {isAdmin ? '👨‍💼 Thông Tin Quản Lý' : '👤 Cập Nhật Hồ Sơ'}
         </button>
         <button 
           onClick={() => setActiveTab('password')}
@@ -239,7 +246,7 @@ function Profile() {
       </div>
 
       {/* TAB 1: LOANS */}
-      {activeTab === 'loans' && (
+      {activeTab === 'loans' && !isAdmin && (
         <>
           <h2 style={{ textAlign: 'left', borderBottom: '2px solid #b01e23', paddingBottom: '10px' }}>
             👤 Thông tin cá nhân
@@ -319,8 +326,105 @@ function Profile() {
         </>
       )}
 
+      {activeTab === 'profile' && isAdmin && (
+        <div style={{ maxWidth: '700px', margin: '0 auto' }}>
+          <h2 style={{ textAlign: 'center', color: '#b01e23', marginBottom: '25px' }}>
+            👨‍💼 Thông Tin Quản Lý
+          </h2>
+
+          <div className="profile-info" style={{ textAlign: 'left', margin: '20px 0', padding: '20px', background: '#fff', borderRadius: '8px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
+            <p><strong>Họ và tên:</strong> {profileData.full_name || 'Chưa cập nhật'}</p>
+            <p><strong>Tên tài khoản:</strong> {username}</p>
+            <p><strong>Vai trò:</strong> Quản lý thư viện</p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '20px' }}>
+            <Link
+              to="/admin"
+              style={{
+                padding: '12px 18px',
+                background: '#b01e23',
+                color: 'white',
+                textDecoration: 'none',
+                borderRadius: '6px',
+                fontWeight: 'bold'
+              }}
+            >
+              Đi tới trang quản lý
+            </Link>
+          </div>
+
+          {message.text && (
+            <div style={{
+              background: message.type === 'success' ? '#e8f5e9' : '#ffebee',
+              color: message.type === 'success' ? '#2e7d32' : '#c62828',
+              padding: '12px',
+              borderRadius: '6px',
+              marginBottom: '15px',
+              textAlign: 'center'
+            }}>
+              {message.text}
+            </div>
+          )}
+
+          <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <div>
+              <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '5px' }}>
+                Họ và tên:
+              </label>
+              <input
+                type="text"
+                value={profileData.full_name}
+                onChange={(e) => setProfileData({ ...profileData, full_name: e.target.value })}
+                style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '5px' }}>
+                Email:
+              </label>
+              <input
+                type="email"
+                value={profileData.email}
+                onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '5px' }}>
+                Số điện thoại:
+              </label>
+              <input
+                type="tel"
+                value={profileData.phone}
+                onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <button
+              type="submit"
+              style={{
+                padding: '12px',
+                background: '#b01e23',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                marginTop: '10px'
+              }}
+            >
+              💾 Lưu Thay Đổi
+            </button>
+          </form>
+        </div>
+      )}
+
       {/* TAB 2: PROFILE */}
-      {activeTab === 'profile' && (
+      {activeTab === 'profile' && !isAdmin && (
         <div style={{ maxWidth: '600px', margin: '0 auto' }}>
           <h2 style={{ textAlign: 'center', color: '#b01e23', marginBottom: '25px' }}>
             📝 Cập Nhật Hồ Sơ
