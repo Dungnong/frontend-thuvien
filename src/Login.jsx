@@ -25,6 +25,17 @@ function Login() {
       localStorage.setItem('refresh_token', response.data.refresh);
       localStorage.setItem('isLoggedIn', 'true');
       localStorage.setItem('username', username);
+
+      try {
+        const profileResponse = await axios.get('http://127.0.0.1:8000/api/core/users/profile/', {
+          headers: {
+            Authorization: `Bearer ${response.data.access}`,
+          }
+        });
+        localStorage.setItem('role', profileResponse.data?.role || 'reader');
+      } catch {
+        localStorage.setItem('role', 'reader');
+      }
       
       // 3. Đăng nhập thành công, đá sang trang Cá nhân và load lại web
       window.location.href = '/dashboard';

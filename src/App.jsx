@@ -8,6 +8,16 @@ import Register from './Register';
 import SeatBooking from './SeatBooking';
 import AdminDashboard from './AdminDashboard';
 
+function parseJwtPayload(token) {
+  try {
+    const payload = token?.split('.')?.[1];
+    if (!payload) return null;
+    return JSON.parse(atob(payload));
+  } catch {
+    return null;
+  }
+}
+
 function ProtectedRoute({ isLoggedIn, children }) {
   if (!isLoggedIn) {
     return <Navigate to="/login" replace />;
@@ -262,8 +272,11 @@ function BookDetail() {
 // ==========================================
 function App() {
   // Đăng nhập dựa trên token để tránh sai lệch state sau khi refresh trang.
-  const isLoggedIn = Boolean(localStorage.getItem('access_token'));
-  const isAdmin = (localStorage.getItem('username') || '').toLowerCase() === 'admin';
+  const accessToken = localStorage.getItem('access_token');
+  const tokenPayload = parseJwtPayload(accessToken);
+  const role = localStorage.getItem('role') || tokenPayload?.role || '';
+  const isLoggedIn = Boolean(accessToken);
+  const isAdmin = role === 'librarian' || tokenPayload?.is_staff === true;
 
   // 2. Hàm xử lý khi bấm nút Đăng xuất
   const handleLogout = () => {
@@ -271,6 +284,7 @@ function App() {
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('isLoggedIn'); // Xóa thẻ đăng nhập
     localStorage.removeItem('username');   // Xóa tên
+    localStorage.removeItem('role');
     window.location.href = '/';            // Đá về trang chủ và tải lại trang
   };
 

@@ -30,16 +30,24 @@ function SeatBooking() {
   });
 
   const myReservations = useMemo(() => {
-    if (!userId) return reservations;
+    if (!userId) return [];
     return reservations.filter((item) => Number(item.user) === Number(userId));
   }, [reservations, userId]);
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return null;
+    return { Authorization: `Bearer ${token}` };
+  };
+
   const loadData = async () => {
     try {
-      const [seatRes, reservationRes] = await Promise.all([
-        axios.get(`${API_BASE}/seats/`),
-        axios.get(`${API_BASE}/reservations/`)
-      ]);
+      const seatPromise = axios.get(`${API_BASE}/seats/`);
+      const authHeaders = getAuthHeaders();
+      const reservationPromise = authHeaders
+        ? axios.get(`${API_BASE}/reservations/`, { headers: authHeaders })
+        : Promise.resolve({ data: [] });
+      const [seatRes, reservationRes] = await Promise.all([seatPromise, reservationPromise]);
 
       setSeats(Array.isArray(seatRes.data) ? seatRes.data : []);
       setReservations(Array.isArray(reservationRes.data) ? reservationRes.data : []);
@@ -50,6 +58,7 @@ function SeatBooking() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCreateReservation = async (e) => {
@@ -63,12 +72,20 @@ function SeatBooking() {
 
     setLoading(true);
     try {
+      const authHeaders = getAuthHeaders();
+      if (!authHeaders) {
+        setMessage({ type: 'error', text: 'Bạn cần đăng nhập trước khi đặt chỗ.' });
+        setLoading(false);
+        return;
+      }
+
       await axios.post(`${API_BASE}/reservations/`, {
-        user: userId,
         seat: Number(form.seat),
         date: form.date,
         start_time: form.start_time,
         end_time: form.end_time
+      }, {
+        headers: authHeaders,
       });
 
       setMessage({ type: 'success', text: 'Đặt chỗ thành công.' });
@@ -87,7 +104,15 @@ function SeatBooking() {
 
   const handleStatusAction = async (reservationId, action) => {
     try {
-      await axios.patch(`${API_BASE}/reservations/${reservationId}/${action}/`, {});
+      const authHeaders = getAuthHeaders();
+      if (!authHeaders) {
+        setMessage({ type: 'error', text: 'Bạn cần đăng nhập trước khi thực hiện thao tác này.' });
+        return;
+      }
+
+      await axios.patch(`${API_BASE}/reservations/${reservationId}/${action}/`, {}, {
+        headers: authHeaders,
+      });
       setMessage({ type: 'success', text: action === 'check_in' ? 'Check-in thành công.' : 'Check-out thành công.' });
       await loadData();
     } catch (error) {
